@@ -1,0 +1,47 @@
+name: Get aria2-next binary
+
+on:
+  schedule:
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+
+jobs:
+  get-aria2-next-binary:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install Necessary Tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl sed wget
+
+    - name: Download Binary
+      run: |
+        VERSION=$(curl -s https://api.github.com/repos/AnInsomniacy/aria2-next/releases | grep 'tag_name' |  head -n 1 | awk -F\" '{print $4}' | sed 's/v//g')
+        wget -O aria2-next-windows-x86_64.exe https://github.com/AnInsomniacy/aria2-next/releases/download/v$VERSION/aria2-next-$VERSION-windows-x86_64.exe
+        wget -O aria2-next-linux-x86_64 https://github.com/AnInsomniacy/aria2-next/releases/download/v$VERSION/aria2-next-$VERSION-linux-x86_64
+
+    - name: Prepare Binary Folder
+      run: |
+        mkdir -p binary
+        mv -f aria2-next-windows-x86_64.exe aria2-next-linux-x86_64 binary
+
+    - name: Configure Git User
+      run: |
+        git config --global user.name 'github-actions'
+        git config --global user.email 'github-actions@github.com'
+
+    - name: Check for Changes and Push Files
+      run: |
+        git checkout -b Release
+        git add binary
+        echo "Force updating repository with local content."
+        git commit -m "Force update with local content"
+        git push --force origin Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
