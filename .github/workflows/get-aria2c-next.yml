@@ -2,15 +2,35 @@ name: Get aria2-next binary
 
 on:
   schedule:
-    # GitHub Actions cron has no interval syntax; run on the 1st and 16th (approximately every 15 days).
-    - cron: '0 16 1,16 * *'
+    # Daily probe; the cadence gate enforces the real 30-day interval.
+    - cron: '0 16 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  cadence:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - name: 30-day cadence gate
+        id: gate
+        run: |
+          D=$(( $(date -u +%s) / 86400 ))
+          A=20741
+          if [ "$D" -ge "$A" ] && [ $(( (D - A) % 30 )) -eq 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "cadence HIT: 30-day cycle, epoch day $D"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "cadence MISS: 30-day cycle, epoch day $D -> skipping real work"
+          fi
+
   get-aria2-next-binary:
+    needs: cadence
+    if: github.event_name != 'schedule' || needs.cadence.outputs.run == 'true'
     runs-on: ubuntu-latest
 
     steps:
