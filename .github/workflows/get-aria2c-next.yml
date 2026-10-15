@@ -2,46 +2,35 @@ name: Get aria2-next binary
 
 on:
   schedule:
-    - cron: '0 16 * * *'
+    # GitHub Actions cron has no interval syntax; run on the 1st and 16th (approximately every 15 days).
+    - cron: '0 16 1,16 * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
 
 jobs:
   get-aria2-next-binary:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Download Binary
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/AnInsomniacY/aria2-next/releases | grep 'tag_name' |  head -n 1 | awk -F\" '{print $4}' | sed 's/v//g')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          curl -fSL -o aria2-next-windows-x86_64.exe "https://github.com/AnInsomniacY/aria2-next/releases/download/v${VERSION}/aria2-next-${VERSION}-windows-x86_64.exe"
+          curl -fSL -o aria2-next-linux-x86_64 "https://github.com/AnInsomniacY/aria2-next/releases/download/v${VERSION}/aria2-next-${VERSION}-linux-x86_64"
 
-    - name: Install Necessary Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y curl sed wget
-
-    - name: Download Binary
-      run: |
-        VERSION=$(curl -s https://api.github.com/repos/AnInsomniacy/aria2-next/releases | grep 'tag_name' |  head -n 1 | awk -F\" '{print $4}' | sed 's/v//g')
-        wget -O aria2-next-windows-x86_64.exe https://github.com/AnInsomniacy/aria2-next/releases/download/v$VERSION/aria2-next-$VERSION-windows-x86_64.exe
-        wget -O aria2-next-linux-x86_64 https://github.com/AnInsomniacy/aria2-next/releases/download/v$VERSION/aria2-next-$VERSION-linux-x86_64
-
-    - name: Prepare Binary Folder
-      run: |
-        mkdir -p binary
-        mv -f aria2-next-windows-x86_64.exe aria2-next-linux-x86_64 binary
-
-    - name: Configure Git User
-      run: |
-        git config --global user.name 'github-actions'
-        git config --global user.email 'github-actions@github.com'
-
-    - name: Check for Changes and Push Files
-      run: |
-        git checkout -b Release
-        git add binary
-        echo "Force updating repository with local content."
-        git commit -m "Force update with local content"
-        git push --force origin Release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      continue-on-error: true
+      - name: Publish Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${VERSION}"
+          echo "Publishing aria2-next ${TAG}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "aria2-next ${TAG}" \
+            --notes "aria2-next ${TAG} binaries, from [AnInsomniacY/aria2-next](https://github.com/AnInsomniacY/aria2-next/releases/tag/v${VERSION})." \
+            aria2-next-windows-x86_64.exe \
+            aria2-next-linux-x86_64
